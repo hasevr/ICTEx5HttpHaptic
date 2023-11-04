@@ -35,6 +35,7 @@
 #include "bdc_motor.h"
 #include "esp_timer.h"
 #include <math.h>
+#include <cJSON.h>
 
 const char* TAG = "main";
 
@@ -44,6 +45,7 @@ const char* TAG = "main";
 
 int adValue=0;
 struct timeval timeReadAdc;
+double freqValue=200.0;
 
 static void http_get_task(void *pvParameters)
 {
@@ -120,13 +122,39 @@ static void http_get_task(void *pvParameters)
         ESP_LOGI(TAG, "... set socket receiving timeout success");
 
         /* Read HTTP response */
+        char buf[1024];
+        buf[0] = '\0';
         do {
             bzero(recv_buf, sizeof(recv_buf));
             r = read(s, recv_buf, sizeof(recv_buf)-1);
             for(int i = 0; i < r; i++) {
                 putchar(recv_buf[i]);
             }
+            strcat(buf, recv_buf);
         } while(r > 0);
+        cJSON *root = NULL;
+        char* pHead;
+
+        for (pHead=buf; *pHead != '\0'&& *pHead != '{'; pHead++) ;
+        if (*pHead == '{') {
+            //   printf("Buffer stripped %s\n", pHead);
+            root=cJSON_Parse(pHead);
+            if (root == NULL) {
+               ESP_LOGE(TAG, "... received wrong json format");
+               continue;
+            }
+            if (cJSON_GetObjectItem(root, "freq")==NULL) {
+               ESP_LOGE(TAG, "... freq not found");
+               continue;
+            }
+            //    printf("freq: %s\n", cJSON_Print(cJSON_GetObjectItem(root, "freq")));
+            freqValue=atof(cJSON_Print(cJSON_GetObjectItem(root, "freq")));
+            printf("received freqValue = %lf\n", freqValue);
+            //  check the received freqValue
+            if (freqValue < 100) freqValue=100;
+            else if (freqValue > 500) freqValue=500;
+            printf(" modified freqValue = %lf\n", freqValue);
+        }
 
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
@@ -156,14 +184,10 @@ bdc_motor_handle_t motor = NULL;
 struct WaveParam{
     const double damp[3];
     const int nDamp;
-    const double freq[6];
-    const int nFreq;
     const double amplitude;
 } wave = {
     .damp = {-2, -5, -10},
     .nDamp = sizeof(wave.damp) / sizeof(wave.damp[0]),
-    .freq = {10, 20, 50, 100, 200, 500},
-    .nFreq = sizeof(wave.freq)/sizeof(wave.freq[0]),
     .amplitude = 2,
 };  
 int count = 0;
@@ -184,11 +208,11 @@ void hapticFunc(void* arg){
     if (adValue > 2400 && since == -1){   //  When the button is pushed after finishing to output an wave.
         //  set the since to 0 and update the waveform parameters.
         since = 0;
-        omega = wave.freq[i % wave.nFreq] * M_PI * 2;
-        B = wave.damp[i/wave.nFreq];
+        omega = freqValue * M_PI * 2;
+        B = wave.damp[i];
         printf("Wave: %3.1fHz, A=%2.2f, B=%3.1f ", omega/(M_PI*2), wave.amplitude, B);
         i++;
-        if (i >= wave.nFreq * wave.nDamp) i = 0;
+        if (i >= wave.nDamp) i = 0;
     }
     //  Output the wave
     double pwm = 0;
