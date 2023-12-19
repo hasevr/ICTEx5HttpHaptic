@@ -27,7 +27,6 @@
 #include <esp_system.h>
 #include <esp_log.h>
 #include <esp_task_wdt.h>
-#include <rom/uart.h>
 #include <driver/uart.h>
 #include <esp_adc/adc_oneshot.h>
 #include <driver/mcpwm_prelude.h>
@@ -177,9 +176,9 @@ static void http_get_task(void *pvParameters)
 static adc_oneshot_unit_handle_t adc1_handle;
 //  PWM control for bdc_motor
 bdc_motor_handle_t motor = NULL;
-#define BDC_MCPWM_TIMER_RESOLUTION_HZ 10000000 // 10MHz, 1 tick = 0.1us
-#define BDC_MCPWM_FREQ_HZ             25000    // 25KHz PWM
-#define BDC_MCPWM_DUTY_TICK_MAX       (BDC_MCPWM_TIMER_RESOLUTION_HZ / BDC_MCPWM_FREQ_HZ) // maximum value we can set for the duty cycle, in ticks
+#define BDC_MCPWM_TIMER_RESOLUTION_HZ 20000000 // 20MHz, 1 tick = 0.05us
+#define BDC_MCPWM_FREQ_HZ             50000    // 50KHz PWM
+#define BDC_MCPWM_DUTY_TICK_MAX       (BDC_MCPWM_TIMER_RESOLUTION_HZ / BDC_MCPWM_FREQ_HZ) // 400 = maximum value we can set for the duty cycle, in ticks
 
 struct WaveParam{
     const double damp[3];
@@ -332,7 +331,7 @@ void app_main(void)
     };
     esp_timer_handle_t timerHandle = NULL;
     esp_timer_create(&timerDesc, &timerHandle);
-    esp_timer_start_periodic(timerHandle, (int)(1000*1000*DT));     // period in micro second (100uS=10kHz)
+    esp_timer_start_periodic(timerHandle, (int)(1000*1000*DT));     //  period in micro second (100uS=10kHz). less than 50 us are not practical.
 #else
     TaskHandle_t taskHandle = NULL;
     xTaskCreate(hapticTask, "Haptic", 1024 * 10, NULL, 6, &taskHandle);
